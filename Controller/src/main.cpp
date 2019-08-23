@@ -1,14 +1,26 @@
 #include <Arduino.h>
+#include <Arduino_FreeRTOS.h>
 
-bool flag = false;
-bool sflag = false;
-int t = 0;
-int swc[3] = {0};
-int pressed = 0;
-int lastprs;
-int released = 0;
-int led[4];
-int cmd = 0;
+//  Multi-threading procedures
+void TaskSwcReception(void *pvParameters);
+void TaskDataReception(void *pvParameters);
+void TaskLedUpdate(void *pvParameters);
+
+/** LEDs behaviour status
+ * 
+ * - Every two bits refers to a LED status
+ * - The lowest two bits is one of the led 0 (white led)
+ *    0b |  00  |  00  |  00  |  00  |
+ *       | led3 | led2 | led1 | led0 |
+ *       |green2|green1|green0|white |
+ * - Each LED will behaves as follows:
+ * -- 00: continuously OFF
+ * -- 11: continuously ON
+ * -- 01: Blink at slow rate
+ * -- 10: Blink at rapid rate 
+ *  
+ */
+byte led_behaviour_code = 0b00000000;
 
 void setup()
 {
@@ -24,70 +36,103 @@ void setup()
   pinMode(8, INPUT);
 
   Serial.begin(9600);
+
+  //  Prepare Executable Multi-THread Tasks
+  xTaskCreate(
+      TaskSwcReception,
+      (const portCHAR *)"Swc",
+      128,
+      NULL,
+      2,
+      NULL);
+  xTaskCreate(
+      TaskDataReception,
+      (const portCHAR *)"Data",
+      128,
+      NULL,
+      1,
+      NULL);
+  xTaskCreate(
+      TaskLedUpdate,
+      (const portCHAR *)"Led",
+      128,
+      NULL,
+      2,
+      NULL);
 }
 
-void loop()
+void loop() {}
+
+void TaskSwcReception(void *pvParameters)
 {
-  delay(2);
-  for (int i = 0; i < 3; i++)
-    swc[i] = digitalRead(6 + i);
-  lastprs = pressed;
-  pressed = 0;
-  for (int i = 0; i < 3; i++)
-    pressed += (swc[i] << i);
+  byte swc[3] = {0};
+  byte status = 0;
+  byte swccode = 0;
 
-  if (lastprs > 0 && pressed == 0)
-    released = 1;
-  else
-    released = 0;
-
-  if (released > 0)
+  while (1)
   {
-    Serial.write(lastprs);
-  }
+    (void)pvParameters;
 
-  if (Serial.available() > 0)
-  {
-    cmd = Serial.read();
+    //  Delay the task for 50 ms
+    vTaskDelay(80 / portTICK_PERIOD_MS);
+
+    //  Get States of switches
+    for (int i = 0; i < 3; i++)
+      swc[i] = digitalRead(6 + i);
+
+    //  The status of switches at a moment is saved as a byte
+    //  A prev status is saved as a code in swccode
+    swccode = status;
+    status = 0;
     for (int i = 0; i < 3; i++)
     {
-      led[i] = ((cmd >> i) & 0b1);
-      digitalWrite(2 + i, led[i]);
+      status += (swc[i] << i);
     }
-  }
 
-  /*
-  if (cmd == 'a')
-  {
-    if (flag)
-    {
-      digitalWrite(2, LOW);
-      Serial.println("let it LOW");
-      flag = false;
-    }
-    else
-    {
-      digitalWrite(2, HIGH);
-      Serial.println("let it HIGH");
-      flag = true;
-    }
+    // Send the code when the switces get RELEASED
+    if (swccode > 0 && status == 0)
+      Serial.write(swccode);
+    //Serial.println(swccode, BIN);
   }
-  if (s == HIGH)
+}
+
+void TaskDataReception(void *pvParameters)
+{
+  (void)pvParameters;
+
+  while (1)
+    if (Serial.available() > 0)
+      led_behaviour_code = Serial.read() - '0';
+}
+void TaskLedUpdate(void *pvParameters)
+{
+  (void)pvParameters;
+
+  bool led[4];
+  bool flag = 0;
+
+LOOPLEDUPDATE:
+  for (int i = 0; i < 4; i++)
   {
-    if (sflag)
+    switch ((led_behaviour_code >> (i * 2)) & 0b11)
     {
-      Serial.print('a');
-      sflag = false;
+    case 0b00:
+      led[i] = 0;
+      break;
+    case 0b11:
+      led[i] = 1;
+      break;
+    case 0b01: //led state turns onec every two loop
+      if (flag)
+        led[i] = !led[i];
+      flag = !flag;
+      break;
+    case 0b10: //led state turns every loop
+      led[i] = !led[i];
+      break;
     }
+    digitalWrite(2 + i, led[i]);
   }
-  else
-  {
-    t++;
-    if (t == 1000)
-    {
-      sflag = true;
-      t = 0;
-    }
-  }
-  */
+  vTaskDelay(250 / portTICK_PERIOD_MS);
+  goto LOOPLEDUPDATE;
 }
