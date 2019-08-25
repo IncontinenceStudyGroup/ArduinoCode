@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "Controller"
+		},
+		{
+			"path": "yowai_ExternalSwitch_for_nano_20190427"
+		},
+		{
+			"path": "MasterBrd"
 		}
 	],
 	"settings": {

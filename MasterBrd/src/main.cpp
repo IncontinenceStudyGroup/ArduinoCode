@@ -41,7 +41,8 @@ A 7
 
 #include <Arduino.h>
 #include <FlexiTimer2.h>
-#include "stateLed.h"
+#include "LEDController.h"
+#include "SigReciever.h"
 
 //ピン番号-----------------------------------------------------------------------------------------
 #define ELE_NUM 9                   //繋げる素子（element）の数
@@ -58,6 +59,8 @@ const int vibration = 9;            //振動子用のピン
 //外部ボタン関連
 #define SW_NUM 3                   //スイッチの数
 byte s_pin[SW_NUM] = {10, 11, 12}; //Urea()入力スイッチ,リセットスイッチ,コレクトスイッチ
+LEDController ledcon;
+stateUrea sUrea;
 
 //add----------------------------------------------
 /*
@@ -65,10 +68,14 @@ byte s_pin[SW_NUM] = {10, 11, 12}; //Urea()入力スイッチ,リセットスイ
 赤 リセット   : 緊急停止
 青 コレクト   : お湯回収
 */
-#define swInputID 0
-#define swResetID 1
-#define swCollectID 2
+enum {
+  swInputID = 001,
+  swResetID = 010,
+  swCollectID = 100
+};
 int swInputPressedNum = 0; //
+SigReciever button;
+
 
 //add----------------------------------------------
 
@@ -161,66 +168,6 @@ void air_value(int value)
   air_max = value;
   Serial.println(air_max);
 }
-////気圧の読み取り------------------------------------------------------------------------------------------------
-//float air_read() {
-//  int input0 = analogRead(7);
-//  if (read_ini_flag == false) {
-//    ini = input0;
-//    read_ini_flag = true;
-//  }
-//  int input1 = analogRead(7);
-//  int dif = input1 - ini;
-//
-//  float mV = float(dif) * 5000.0 / 1024.0; //センサ値をボルトに変換
-//
-//  Serial.println(mV);
-//  return mV;
-//}
-////気圧を下げる----------------------------------------------------------------------------------------------
-//void air_check() {
-//  float air_value = air_read();
-//  if (air_value < air_target && release_flag == true && air_max_flag == false) {
-//    delay(1000);
-//    //digitalWrite(solenoid_valve,HIGH);
-//
-//    digitalWrite(air_motor, LOW);
-//    air_target += 40;
-//    release_flag = false;
-//
-//  }
-//}
-////気圧の制御---------------------------------------------------------------------------------------------
-//void air_control() {
-//  float air_value = air_read();
-//
-//  if (air_max_flag == false)
-//    air_supply();
-//
-//  if (air_value >= air_target && air_max_flag == false) {
-//    //digitalWrite(solenoid_valve,LOW);
-//    digitalWrite(air_motor, LOW);
-//    release_flag = true;
-//  }
-//  if (air_value >= air_max) {
-//    air_max_flag = true;
-//    digitalWrite(air_motor, LOW);
-//    air_target = 40;
-//    if (urea_flag == true) {
-//      delay(1000);
-//      digitalWrite(solenoid_valve, HIGH);
-//      Urea();
-//    }
-//    delay(1000);
-//  }
-//  if (air_max_flag == true) {
-//
-//    digitalWrite(solenoid_valve, HIGH);
-//  }
-//
-//
-//}
-
-//----------------------------------------------------------------------------------------------
 void Urea()
 {
 
@@ -374,7 +321,7 @@ void reset()
 
   swInputPressedNum = 0;
 
-  ledInit();
+  ledcon.init();
 }
 //add--------------------
 //一時停止
@@ -397,31 +344,6 @@ void reUrea()
 }
 //add--------------------
 
-//スイッチゲージ制御
-byte BUTTON(byte pin_num)
-{
-  static unsigned short gauge[SW_NUM];
-
-  byte sw_status = 0;
-
-  //check switch status on or off
-  if (!digitalRead(s_pin[pin_num])) //スイッチが押されていないとき
-  {
-    gauge[pin_num]++;                                 //ゲージ増加
-    gauge[pin_num] = min(gauge[pin_num], PUSH_LIMIT); //ゲージ限界を超えたらゲージの値を限界値にする
-  }
-  else
-  { //スイッチが押されたとき
-    if (gauge[pin_num] >= PUSH_SHORT)
-      sw_status = 255;  //ゲージが閾値を超えたらSWを255にする
-    gauge[pin_num] = 0; //ゲージを0にする
-  }
-  //return value of switch status
-  if (gauge[pin_num] >= PUSH_SHORT)
-    sw_status = 1; //ゲージが閾値を超えたらSWを1にする
-
-  return sw_status;
-}
 
 //セットアップ--------------------------------------------------------------------------------------------
 void setup()
@@ -437,7 +359,8 @@ void setup()
     pinMode(s_pin[i], INPUT);
   }
 
-  ledInit();
+  ledcon.init();
+  button.init();
 
   Serial.begin(9600);
 }
@@ -448,64 +371,49 @@ void loop()
 {
 
   //スイッチ入力取得 -------------------------------------------------------
-  for (byte i = 0; i < SW_NUM; i++)
-  {
-    byte sw = BUTTON(i);
-    if (sw == 255)
+  button.checkBuffer();
+  if(button.isPressed()){
+    switch (button.getData())
     {
-      switch (i)
+    case swInputID:        // 開始、一時停止、再開
+      swInputPressedNum++; //0スタート.  押された回数 : swInputPressedNum
+
+      if (swInputPressedNum == 1) //開始
       {
-        //        case 0://失禁開始
-        //          //Serial.println("Urea switch ON");
-        //          urea_flag = true;
-        //          break;
-        //        case 1://リセット
-        //          reset();
-        //          break;
-        //
-        //        case 2://collect water
-        //          collect_flag = true;//停止時はｒコマンド入力
-        //          CollectWaterTest();
-        //          break;
-      case swInputID:        // 開始、一時停止、再開
-        swInputPressedNum++; //0スタート.  押された回数 : swInputPressedNum
-
-        if (swInputPressedNum == 1) //開始
-        {
-          //失禁開始
-          //Serial.println("Urea switch ON");
-          urea_flag = true;
-        }
-        else if (swInputPressedNum == 2) //一時停止
-        {
-          Serial.println("\n---- 一時停止 ----"); //debug
-          pause();
-        }
-        else if (swInputPressedNum == 3) //再開
-        {
-          Serial.println("\n---- 再開 ----"); //debug
-          reUrea();
-          swInputPressedNum = 1; // 次押されたら一時停止(2)へ
-        }
-        else
-        {
-        }
-
-        break;
-
-      case swResetID: // リセット
-        reset();
-        break;
-
-      case swCollectID: //collect water
-        sUrea = eWATER_COLLECTING;
-        collect_flag = true; //停止時はｒコマンド入力
-        CollectWaterTest();
-        break;
+        //失禁開始
+        //Serial.println("Urea switch ON");
+        urea_flag = true;
       }
+      else if (swInputPressedNum == 2) //一時停止
+      {
+        Serial.println("\n---- 一時停止 ----"); //debug
+        pause();
+      }
+      else if (swInputPressedNum == 3) //再開
+      {
+        Serial.println("\n---- 再開 ----"); //debug
+        reUrea();
+        swInputPressedNum = 1; // 次押されたら一時停止(2)へ
+      }
+      else
+      {
+      }
+
+      break;
+
+    case swResetID: // リセット
+      reset();
+      break;
+
+    case swCollectID: //collect water
+      sUrea = eWATER_COLLECTING;
+      collect_flag = true; //停止時はｒコマンド入力
+      CollectWaterTest();
+      break;
     }
   }
 
+#if 0
   // シリアル解析-------------------------------------------------------
   if (Serial.available() > 0)
   {                                     //シリアルモニタに文字が入力されていたら
@@ -549,6 +457,11 @@ void loop()
     else if (str == "collect")
     {                      //回収用水袋のテスト
       collect_flag = true; //停止時はｒコマンド入力
+      digitalWrite(led_pin[ _sUrVa ], HIGH); // 点灯
+      // 他を消す
+      for(int i=0; i<LED_NUM; i++){
+        if( i != _sUrea ) digitalWrite(led_pin[ i ], LOW);
+      }
       CollectWaterTest();
     }
     else if (str == "water")
@@ -578,6 +491,7 @@ void loop()
       Serial.println("]");
     }
   }
+#endif 
 
   if (urea_flag)
   {
@@ -586,7 +500,7 @@ void loop()
   }
 
   //LED
-  ledUpdate(urea_flag, sUrea);
+  ledcon.update(urea_flag, sUrea);
 
   //  apply();//各素子の状態を適用
 
@@ -610,3 +524,63 @@ void loop()
   Serial.println(collect_cooling_water_output);
 }
 //---------------------------------------------------
+////気圧の読み取り------------------------------------------------------------------------------------------------
+//float air_read() {
+//  int input0 = analogRead(7);
+//  if (read_ini_flag == false) {
+//    ini = input0;
+//    read_ini_flag = true;
+//  }
+//  int input1 = analogRead(7);
+//  int dif = input1 - ini;
+//
+//  float mV = float(dif) * 5000.0 / 1024.0; //センサ値をボルトに変換
+//
+//  Serial.println(mV);
+//  return mV;
+//}
+////気圧を下げる----------------------------------------------------------------------------------------------
+//void air_check() {
+//  float air_value = air_read();
+//  if (air_value < air_target && release_flag == true && air_max_flag == false) {
+//    delay(1000);
+//    //digitalWrite(solenoid_valve,HIGH);
+//
+//    digitalWrite(air_motor, LOW);
+//    air_target += 40;
+//    release_flag = false;
+//
+//  }
+//}
+////気圧の制御---------------------------------------------------------------------------------------------
+//void air_control() {
+//  float air_value = air_read();
+//
+//  if (air_max_flag == false)
+//    air_supply();
+//
+//  if (air_value >= air_target && air_max_flag == false) {
+//    //digitalWrite(solenoid_valve,LOW);
+//    digitalWrite(air_motor, LOW);
+//    release_flag = true;
+//  }
+//  if (air_value >= air_max) {
+//    air_max_flag = true;
+//    digitalWrite(air_motor, LOW);
+//    air_target = 40;
+//    if (urea_flag == true) {
+//      delay(1000);
+//      digitalWrite(solenoid_valve, HIGH);
+//      Urea();
+//    }
+//    delay(1000);
+//  }
+//  if (air_max_flag == true) {
+//
+//    digitalWrite(solenoid_valve, HIGH);
+//  }
+//
+//
+//}
+
+//----------------------------------------------------------------------------------------------
