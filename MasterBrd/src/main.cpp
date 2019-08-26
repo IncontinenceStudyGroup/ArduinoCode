@@ -68,14 +68,14 @@ stateUrea sUrea;
 赤 リセット   : 緊急停止
 青 コレクト   : お湯回収
 */
-enum {
-  swInputID = 001,
-  swResetID = 010,
-  swCollectID = 100
+enum
+{
+  swInputID = 0b001,
+  swResetID = 0b010,
+  swCollectID = 0b100
 };
 int swInputPressedNum = 0; //
 SigReciever button;
-
 
 //add----------------------------------------------
 
@@ -111,13 +111,13 @@ int len;        //コマンドの長さ格納用
 int command[5]; //','で区切った値が入る
 String str;     //読み込んだ文字列を格納
 //各素子の状態--------------------------------------------------------------------------------------------------
-boolean air_output = LOW;
-boolean solenoid_output = LOW;
-boolean water_output = LOW;
-boolean collect_output = LOW;
-boolean neck_output = LOW;
-boolean cooling_water_output = LOW;
-boolean collect_cooling_water_output = LOW;
+bool air_output = LOW;
+bool solenoid_output = LOW;
+bool water_output = LOW;
+bool collect_output = LOW;
+bool neck_output = LOW;
+bool cooling_water_output = LOW;
+bool collect_cooling_water_output = LOW;
 //------------------------------------------------------------------------------------------------------
 
 //時間カウント--------------------------------------------------------------------------------------------------
@@ -166,7 +166,7 @@ void air_release()
 void air_value(int value)
 {
   air_max = value;
-  Serial.println(air_max);
+  //Serial.println(air_max);
 }
 void Urea()
 {
@@ -344,19 +344,15 @@ void reUrea()
 }
 //add--------------------
 
-
 //セットアップ--------------------------------------------------------------------------------------------
 void setup()
 {
 
+  //Acutuators pin setup
   for (int i = 2; i <= ELE_NUM; i++)
   {
     pinMode(i, OUTPUT);
     digitalWrite(i, LOW);
-  }
-  for (int i = 0; i < SW_NUM; i++)
-  {
-    pinMode(s_pin[i], INPUT);
   }
 
   ledcon.init();
@@ -372,10 +368,12 @@ void loop()
 
   //スイッチ入力取得 -------------------------------------------------------
   button.checkBuffer();
-  if(button.isPressed()){
+  if (button.isPressed())
+  {
     switch (button.getData())
     {
-    case swInputID:        // 開始、一時停止、再開
+    case swInputID: // 開始、一時停止、再開
+    case swInputID + '0':
       swInputPressedNum++; //0スタート.  押された回数 : swInputPressedNum
 
       if (swInputPressedNum == 1) //開始
@@ -386,12 +384,12 @@ void loop()
       }
       else if (swInputPressedNum == 2) //一時停止
       {
-        Serial.println("\n---- 一時停止 ----"); //debug
+        //Serial.println("\n---- 一時停止 ----"); //debug
         pause();
       }
       else if (swInputPressedNum == 3) //再開
       {
-        Serial.println("\n---- 再開 ----"); //debug
+        //Serial.println("\n---- 再開 ----"); //debug
         reUrea();
         swInputPressedNum = 1; // 次押されたら一時停止(2)へ
       }
@@ -402,10 +400,14 @@ void loop()
       break;
 
     case swResetID: // リセット
+    case swResetID + '0':
+      //Serial.println("Reset");
       reset();
       break;
 
-    case swCollectID: //collect water
+    case swCollectID:
+    case swCollectID + '0':
+      //Serial.println("Collect");
       sUrea = eWATER_COLLECTING;
       collect_flag = true; //停止時はｒコマンド入力
       CollectWaterTest();
@@ -413,6 +415,35 @@ void loop()
     }
   }
 
+  if (urea_flag)
+  {
+    Urea();  // 各素子の状態を変更
+    apply(); // 各素子の状態を適用
+  }
+
+  //LED
+  ledcon.update(urea_flag, sUrea);
+}
+#if 0
+  Serial.print(t);
+  Serial.print("    ");
+  Serial.print(String(times, 4));
+  Serial.print("/");
+  Serial.print(float(air_pump_time + blank_time + water_time + +blank_time2 + cooling_water_time + collect_delay));
+  Serial.print("    ");
+  Serial.print("エアー：");
+  Serial.print(air_output);
+  Serial.print("  電磁弁：");
+  Serial.print(solenoid_output);
+  Serial.print("  お湯：");
+  Serial.print(water_output);
+  Serial.print("  お湯回収ポンプ");
+  Serial.print(collect_output);
+  Serial.print("  冷却水：");
+  Serial.print(cooling_water_output);
+  Serial.print("  冷却水回収ポンプ");
+  Serial.println(collect_cooling_water_output);
+#endif
 #if 0
   // シリアル解析-------------------------------------------------------
   if (Serial.available() > 0)
@@ -491,38 +522,7 @@ void loop()
       Serial.println("]");
     }
   }
-#endif 
-
-  if (urea_flag)
-  {
-    Urea();  // 各素子の状態を変更
-    apply(); // 各素子の状態を適用
-  }
-
-  //LED
-  ledcon.update(urea_flag, sUrea);
-
-  //  apply();//各素子の状態を適用
-
-  Serial.print(t);
-  Serial.print("    ");
-  Serial.print(String(times, 4));
-  Serial.print("/");
-  Serial.print(float(air_pump_time + blank_time + water_time + +blank_time2 + cooling_water_time + collect_delay));
-  Serial.print("    ");
-  Serial.print("エアー：");
-  Serial.print(air_output);
-  Serial.print("  電磁弁：");
-  Serial.print(solenoid_output);
-  Serial.print("  お湯：");
-  Serial.print(water_output);
-  Serial.print("  お湯回収ポンプ");
-  Serial.print(collect_output);
-  Serial.print("  冷却水：");
-  Serial.print(cooling_water_output);
-  Serial.print("  冷却水回収ポンプ");
-  Serial.println(collect_cooling_water_output);
-}
+#endif
 //---------------------------------------------------
 ////気圧の読み取り------------------------------------------------------------------------------------------------
 //float air_read() {

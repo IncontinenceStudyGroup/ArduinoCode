@@ -1,9 +1,10 @@
 #ifndef _SIGRECIEVER_H_
 #define _SIGRECIEVER_H_
-#include "CtrlComHandler.h"
+#include "SerialComHandler.h"
 
-class SigReciever {
-    public:
+class SigReciever
+{
+public:
     SigReciever();
     ~SigReciever();
     void init();
@@ -12,9 +13,9 @@ class SigReciever {
     bool isPressed();
     unsigned char getData();
 
-    private:
+private:
     unsigned char m_data;
-    CtrlComHandler m_serialcom;
+    SerialComHandler m_serialcom;
 };
 
 #endif

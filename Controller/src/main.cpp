@@ -59,6 +59,7 @@ void setup()
       NULL,
       2,
       NULL);
+  led_behaviour_code = 0b00000000;
 }
 
 void loop() {}
@@ -92,29 +93,40 @@ void TaskSwcReception(void *pvParameters)
     // Send the code when the switces get RELEASED
     if (swccode > 0 && status == 0)
       Serial.write(swccode);
-    //Serial.println(swccode, BIN);
+      //Serial.println(swccode, BIN);
   }
 }
 
 void TaskDataReception(void *pvParameters)
 {
   (void)pvParameters;
+  int tmp = 0;
 
-  while (1)
-    if (Serial.available() > 0)
-      led_behaviour_code = Serial.read() - '0';
+  while (1){
+    if (Serial.available() > 0){
+      tmp = Serial.read();
+
+      //  For debug
+      //  following statement could do bad if you use integer>='0' as a code
+      //if (tmp >= '0') tmp -= '0';
+
+      led_behaviour_code = tmp;
+    }
+  }
+
 }
 void TaskLedUpdate(void *pvParameters)
 {
   (void)pvParameters;
 
   bool led[4];
-  bool flag = 0;
+  bool flag[4] = {0};
 
 LOOPLEDUPDATE:
   for (int i = 0; i < 4; i++)
   {
-    switch ((led_behaviour_code >> (i * 2)) & 0b11)
+    byte tmp = (led_behaviour_code >> (i * 2)) & 0b11;
+    switch (tmp)
     {
     case 0b00:
       led[i] = 0;
@@ -123,14 +135,15 @@ LOOPLEDUPDATE:
       led[i] = 1;
       break;
     case 0b01: //led state turns onec every two loop
-      if (flag)
+      if (flag[i])
         led[i] = !led[i];
-      flag = !flag;
+      flag[i] = !flag[i];
       break;
     case 0b10: //led state turns every loop
       led[i] = !led[i];
       break;
     }
+    //Serial.write(tmp);
     digitalWrite(2 + i, led[i]);
   }
   vTaskDelay(250 / portTICK_PERIOD_MS);
