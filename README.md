@@ -18,6 +18,12 @@
     * `#include <Arduino.h>` を消去
     * src/以下，include/以下のファイルを一緒にビルドできるところに持っていく．
     * LibraryとしてFlexiTimer2をインストール
+  * 通信周りについて
+    * Controllerとのシリアル通信はUART（ハードウェア）で行っている．
+    * このUARTはUSB変換チップにつながっており，PCとの通信にも使われている．
+    * Controllerとの通信とPCとの通信を同時に行いたい場合は，SerialComHandler.cpp/.hをSoftwareSerialを使うように書き換え，基板もそれに用にすればよい
+      * SoftwareSerial... ソフトウェアでUARTをシミュレートするライブラリ，好きなDigitalIOピンをTX/RXピンとして使えるようにできる．
+      
 
 * yowai_ExternalSwitch_for_nano_20190427
     * ArduinoNanoと外部スイッチ，リレーモジュールを使ったコード
